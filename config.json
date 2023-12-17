@@ -1,0 +1,50 @@
+{
+    "path":
+    {
+        "raw_data": "C:\\Users\\liorr\\Desktop\\Porto_Santo_IMG",
+        "raw_data_rescaled": "C:\\Users\\liorr\\Desktop\\Porto_Santo_Run\\raw_data_rescaled\\",
+        "output_dir_for_tiles": "C:\\Users\\liorr\\Desktop\\Porto_Santo_Run\\tiles\\",
+        "shapefile_of_non_tree_areas": "C:\\Users\\liorr\\Desktop\\Porto_Santo_IMG\\Porto_Santo_Seas\\porto_santo_seas.shp",
+        "train_tiles_dir": "C:\\Users\\liorr\\Desktop\\Porto_Santo_Run\\train_tiles_dir\\",
+        "masks_dir": "C:\\Users\\liorr\\Desktop\\Porto_Santo_Run\\masks_dir\\",
+        "shapefile_of_tiny_water_bodies_or_smalll_area_without_trees": "F:\\Material_solver_Porto_Santo\\Materials_Porto_Santo_alpha_version\\water_polygons\\porto_santo_seas.shp",
+        "output": "C:\\Users\\liorr\\Desktop\\Porto_Santo_Run\\output\\",
+        "tiles_results":  "C:\\Users\\liorr\\Desktop\\Porto_Santo_Run\\tiles_results"
+
+    },
+    
+    "tile":
+    {
+            "dim":  [268, 365]
+    },
+    
+    "raw_data":
+    {
+        "current_resolution": [0.15, 0.15],
+        "desired_resolution": [0.45, 0.45]
+    },
+    "grass_color":
+    {
+        "lower_hsv" : [31, 30, 0],
+        "upper_hsv" : [80, 255, 255]
+    },
+    "tiles_between_areas":
+    {
+        "analyze": false
+    },
+    "model":
+    {
+        "train": true 
+    },
+	"tree":
+	{
+		"maximum_radius_for_single_tree": 6
+	},
+	"poisson_disc_sampling": 
+	{
+		"radius" : 15
+	}
+    
+
+
+}
