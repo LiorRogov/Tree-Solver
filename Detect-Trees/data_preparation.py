@@ -30,6 +30,9 @@ import pandas as pd
 from shapely.geometry import Polygon
 import json
 from rasterio.features import Window
+from rasterio.crs import CRS
+from shapely.geometry import box
+
 
 
 CONST_DIR_INNER_DATA = 'iner_data\\'
@@ -99,6 +102,7 @@ def save_rescaled(tif_path,  output_dir, new_resolution=  tuple(c['raw_data']['d
         'count': 3,  # Set count to 3 for RGB image
         'crs': crs,
         'transform': new_transform,
+        'crs': CRS.from_epsg(4326)
     }
 
     # Transpose the image data to match the expected shape (3, new_height, new_width)
@@ -122,10 +126,11 @@ os.makedirs(output_dir, exist_ok=True)
 
 print ("raw tiff images rescaling has begun")
 # Iterate through all TIFF files in the data directory
-if (glob.glob(data + '\\' + '*.tif') == []):
+if (glob.glob(os.path.join(data, '*.tif')) == []):
     raise Exception('raw data folder is empty')
 
-for tif_image_path in tqdm(glob.glob(data + '\\' + '*.tif')):
+
+for tif_image_path in tqdm(glob.glob(os.path.join(data, '*.tif'))):
     # Call the save_rescaled function to rescale and save each TIFF file
     path = save_rescaled(tif_image_path, output_dir)
 
@@ -183,16 +188,17 @@ def to_tiles(rescled_path, output_dir, tile_dim= tuple(c['tile']['dim'])):
     #print("Tiles created successfully.")  # Print a message indicating successful tile creation
 
 # Define the directory where the rescaled images are saved
-data = output_dir
+data = c['path']['raw_data_rescaled']
 
 # Define the directory where you want to save the tiles
 output_dir = c['path']['output_dir_for_tiles']
 
 print (data, glob.glob(data + '*.tif'))
+
 os.makedirs(output_dir, exist_ok=True)
 print ('raw data rescaled to tiles, has been started')
 # Iterate through all TIFF files in the 'data' directory
-for tif_image_path in tqdm(glob.glob(data + '*.tif')):
+for tif_image_path in tqdm(glob.glob(os.path.join(data, '*.tif'))):
     # Call the 'to_tiles' function to split each rescaled image into tiles remember all the tiles must be at the same size. Therefore the Geotiff's resolution in data directory must be devisible by the tile's resulution.
     to_tiles(tif_image_path, output_dir)
 
@@ -217,13 +223,7 @@ def is_tile_intersects_with_object(tile_path ,polylines):
         height = src.height
 
         # Calculate the coordinates of the four corners of the image
-        bottom_left = transform * (0, height)
-        bottom_right = transform * (width, height)
-        top_left = transform * (0, 0)
-        top_right = transform * (width, 0)
-
-        # Create a polygon from the coordinates of the four corners
-        image_polygon = Polygon([bottom_left, bottom_right, top_right, top_left])
+        image_polygon = box(*src.bounds)
 
         # Iterate through each polyline in the 'polylines' DataFrame
         for row in polylines.itertuples():
@@ -250,14 +250,7 @@ def is_tile_within_object(tile_path, polygons):
         width = src.width
         height = src.height
 
-        # Calculate the coordinates of the four corners of the image
-        bottom_left = transform * (0, height)
-        bottom_right = transform * (width, height)
-        top_left = transform * (0, 0)
-        top_right = transform * (width, 0)
-
-        # Create a polygon from the coordinates of the four corners
-        image_polygon = Polygon([bottom_left, bottom_right, top_right, top_left])
+        image_polygon = box(*src.bounds)
 
         # Iterate through each polygon in the 'polygons' DataFrame
         for row in polygons.itertuples():
@@ -292,11 +285,11 @@ tree_area_tiles = []
 print ('tiles are devided to categories')
 # Load non-tree area polygons from the shapefile
 
-
+print (output_dir)
 if (shapefile_path_of_areas_non_tree_polygons != ''):
     areas_non_tree_polygons = gpd.read_file(shapefile_path_of_areas_non_tree_polygons)
     # Iterate through each tile in the specified directory
-    for tile_path in tqdm(glob.glob(output_dir + '*tif')):
+    for tile_path in tqdm(glob.glob(os.path.join(c['path']['output_dir_for_tiles'] , '*tif'))):
         # Check if the tile is within non-tree areas
         if is_tile_within_object(tile_path, areas_non_tree_polygons):
             non_tree_areas_tiles.append(tile_path)
@@ -307,8 +300,9 @@ if (shapefile_path_of_areas_non_tree_polygons != ''):
         else:
             tree_area_tiles.append(tile_path)
 
+
 else:
-    tree_area_tiles = glob.glob(output_dir + '*tif')
+    tree_area_tiles = glob.glob(os.path.join(c['path']['output_dir_for_tiles'],'*.tif'))
     #saving the paths' lists as a pickle files for future use.
 
 with open(CONST_DIR_INNER_DATA + 'tree_area_tiles.pkl', 'wb') as f:
@@ -319,6 +313,16 @@ with open(CONST_DIR_INNER_DATA + 'tiles_between_areas.pkl', 'wb') as f:
 
 with open(CONST_DIR_INNER_DATA + 'non_tree_areas_tiles.pkl', 'wb') as f:
     pickle.dump(non_tree_areas_tiles, f)
+
+# File path where you want to save the list
+txt_file_path = CONST_DIR_INNER_DATA + 'tree_area_tiles.txt'
+
+print (CONST_DIR_INNER_DATA + 'tree_area_tiles.txt')
+# Open the file in write mode ('w')
+with open(txt_file_path, 'w') as f:
+    # Iterate over the list and write each element to a new line
+    for path in tree_area_tiles:
+        f.write(str(path) + '\n')
 
 
 """**Model Training using Detectree Library (Pythonic Library):**

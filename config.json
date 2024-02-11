@@ -1,27 +1,26 @@
 {
     "path":
     {
-        "raw_data": "C:\\Users\\liorr\\Desktop\\Porto_Santo_IMG",
-        "raw_data_rescaled": "C:\\Users\\liorr\\Desktop\\Porto_Santo_Run\\raw_data_rescaled\\",
-        "output_dir_for_tiles": "C:\\Users\\liorr\\Desktop\\Porto_Santo_Run\\tiles\\",
-        "shapefile_of_non_tree_areas": "C:\\Users\\liorr\\Desktop\\Porto_Santo_IMG\\Porto_Santo_Seas\\porto_santo_seas.shp",
-        "train_tiles_dir": "C:\\Users\\liorr\\Desktop\\Porto_Santo_Run\\train_tiles_dir\\",
-        "masks_dir": "C:\\Users\\liorr\\Desktop\\Porto_Santo_Run\\masks_dir\\",
-        "shapefile_of_tiny_water_bodies_or_smalll_area_without_trees": "F:\\Material_solver_Porto_Santo\\Materials_Porto_Santo_alpha_version\\water_polygons\\porto_santo_seas.shp",
-        "output": "C:\\Users\\liorr\\Desktop\\Porto_Santo_Run\\output\\",
-        "tiles_results":  "C:\\Users\\liorr\\Desktop\\Porto_Santo_Run\\tiles_results"
+        "root_folder": "C:\\Users\\Simlat\\Desktop\\simlat lior\\projects_materials\\full_porto_santo",
+        "raw_data_rescaled": "C:\\Users\\Simlat\\Desktop\\simlat lior\\projects_materials\\full_porto_santo\\raw_data_rescaled",
+        "output_dir_for_tiles": "C:\\Users\\Simlat\\Desktop\\simlat lior\\projects_materials\\full_porto_santo\\tiles",
+        "shapefile_of_non_tree_areas": "C:\\Users\\Simlat\\Desktop\\simlat lior\\projects_materials\\full_porto_santo\\vectors\\water_polygon_WG84.shp",
+        "train_tiles_dir": "C:\\Users\\Simlat\\Desktop\\simlat lior\\projects_materials\\full_porto_santo\\train_tiles_dir\\",
+        "masks_dir": "C:\\Users\\Simlat\\Desktop\\simlat lior\\projects_materials\\full_porto_santo\\masks_dir\\",
+        "shapefile_of_tiny_water_bodies_or_smalll_area_without_trees": "",
+        "output": "C:\\Users\\Simlat\\Desktop\\simlat lior\\projects_materials\\full_porto_santo\\output\\",
+        "tiles_results":  "C:\\Users\\Simlat\\Desktop\\simlat lior\\projects_materials\\full_porto_santo\\tiles_results"
 
     },
-    
     "tile":
     {
-            "dim":  [268, 365]
+            "dim":  [1024, 1024]
     },
     
     "raw_data":
     {
-        "current_resolution": [0.15, 0.15],
-        "desired_resolution": [0.45, 0.45]
+        "current_resolution": [0.5, 0.5],
+        "desired_resolution": [0.5, 0.5]
     },
     "grass_color":
     {
