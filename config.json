@@ -1,31 +1,31 @@
 {
     "path":
     {
-        "root_folder": "C:\\Users\\Simlat\\Desktop\\simlat lior\\projects_materials\\full_porto_santo",
-        "raw_data_rescaled": "C:\\Users\\Simlat\\Desktop\\simlat lior\\projects_materials\\full_porto_santo\\raw_data_rescaled",
-        "output_dir_for_tiles": "C:\\Users\\Simlat\\Desktop\\simlat lior\\projects_materials\\full_porto_santo\\tiles",
-        "shapefile_of_non_tree_areas": "C:\\Users\\Simlat\\Desktop\\simlat lior\\projects_materials\\full_porto_santo\\vectors\\water_polygon_WG84.shp",
-        "train_tiles_dir": "C:\\Users\\Simlat\\Desktop\\simlat lior\\projects_materials\\full_porto_santo\\train_tiles_dir\\",
-        "masks_dir": "C:\\Users\\Simlat\\Desktop\\simlat lior\\projects_materials\\full_porto_santo\\masks_dir\\",
+        "raw_data": "C:\\Users\\Simlat\\Desktop\\simlat lior\\projects_materials\\full_Alaro\\alaro_Trees\\Images",
+        "raw_data_rescaled": "C:\\Users\\Simlat\\Desktop\\simlat lior\\projects_materials\\full_Alaro\\alaro_Trees\\raw_data_rescaled",
+        "output_dir_for_tiles": "C:\\Users\\Simlat\\Desktop\\simlat lior\\projects_materials\\full_Alaro\\alaro_Trees\\tiles",
+        "shapefile_of_non_tree_areas": "",
+        "train_tiles_dir": "C:\\Users\\Simlat\\Desktop\\simlat lior\\projects_materials\\full_Alaro\\alaro_Trees\\train_tiles_dir\\",
+        "masks_dir": "C:\\Users\\Simlat\\Desktop\\simlat lior\\projects_materials\\full_Alaro\\alaro_Trees\\masks_dir\\",
         "shapefile_of_tiny_water_bodies_or_smalll_area_without_trees": "",
-        "output": "C:\\Users\\Simlat\\Desktop\\simlat lior\\projects_materials\\full_porto_santo\\output\\",
-        "tiles_results":  "C:\\Users\\Simlat\\Desktop\\simlat lior\\projects_materials\\full_porto_santo\\tiles_results"
+        "output": "C:\\Users\\Simlat\\Desktop\\simlat lior\\projects_materials\\full_Alaro\\alaro_Trees\\output\\",
+        "tiles_results":  "C:\\Users\\Simlat\\Desktop\\simlat lior\\projects_materials\\full_Alaro\\alaro_Trees\\tiles_results"
 
     },
     "tile":
     {
-            "dim":  [1024, 1024]
+            "dim":  [256, 256]
     },
     
     "raw_data":
     {
-        "current_resolution": [0.5, 0.5],
-        "desired_resolution": [0.5, 0.5]
+        "current_resolution": [0.15, 0.15],
+        "desired_resolution": [0.15, 0.15]
     },
     "grass_color":
     {
-        "lower_hsv" : [31, 30, 0],
-        "upper_hsv" : [80, 255, 255]
+        "lower_hsv" : [60, 30, 0],
+        "upper_hsv" : [150, 255, 255]
     },
     "tiles_between_areas":
     {

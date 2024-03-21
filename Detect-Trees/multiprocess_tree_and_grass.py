@@ -11,10 +11,8 @@ import numpy as np
 import pandas as pd
 import poisson_disc
 import geopandas as gpd
-from shapely.geometry import Point, MultiPolygon
+from shapely.geometry import Point, MultiPolygon, box
 import xml.etree.ElementTree as ET
-import tifffile
-import warnings
 
 from rasterio.features import shapes
 from shapely.geometry import shape
@@ -26,19 +24,11 @@ import multiprocessing
 
 import json
 
+# At this point, 'clf' contains the loaded machine learning model from 'tree_model.pkl'
 with open('config.json', 'r') as f:
-    c = json.load(f)
+        c = json.load(f)
 
 CONST_DIR_INNER_DATA = 'iner_data\\'
-results = c['path']['tiles_results']
-
-
-#read configuration from xml file
-maximum_radius_for_single_tree = c['tree']['maximum_radius_for_single_tree']
-spacial_resulution = c['raw_data']['desired_resolution'][0]
-
-# Use the glob module to search for a file named 'tree_model.pkl' in the current directory
-# Assuming there's only one such file, get its path
 file_path = glob.glob(CONST_DIR_INNER_DATA + 'tree_model.pkl')[0]
 
 # Open the 'tree_model.pkl' file in binary read mode
@@ -46,7 +36,15 @@ with open(file_path, "rb") as f:
     # Load (deserialize) the machine learning model from the file
     clf = pickle.load(f)
 
-# At this point, 'clf' contains the loaded machine learning model from 'tree_model.pkl'
+results = c['path']['tiles_results']
+
+non_area_trees_shapefile_path = c['path']['shapefile_of_non_tree_areas']
+if non_area_trees_shapefile_path != "":
+    non_area_trees_shapefile = gpd.read_file(non_area_trees_shapefile_path)
+
+#read configuration from xml file
+maximum_radius_for_single_tree = c['tree']['maximum_radius_for_single_tree']
+spacial_resulution = c['raw_data']['desired_resolution'][0]
 
 
 def saperate_single_multiple_trees(properties ,y_pred, labels):
@@ -117,27 +115,32 @@ def save_tree_object(shapefile, y_pred, tile_path):
     mask = np.where(y_pred != 0, 255, 0)
 
     # Save the tree mask as a GeoTIFF file with specified metadata
-    tifffile.imwrite(
-        f'{results}/{tile_name}/tree_mask.tif', 
-        np.dstack((mask, mask, mask)).astype('uint8'),
-        photometric='rgb',
-        compression='LZW',
-        bitspersample=8,
-        tile=(32, 32),
-        planarconfig=1  # chunky format
-    )
+    with rio.open(tile_path) as src:
+        transform = src.transform
+        crs = src.crs
 
-    # Open the source TIFF dataset
-    source_tiff_dataset = rio.open(tile_path)
+    export_as_tif(f'{results}/{tile_name}/tree_mask.tif', np.dstack((mask, mask, mask)).astype('uint8'), transform, crs)
 
-    # Set the destination TIFF path
-    destination_tiff_path = f'{results}/{tile_name}/tree_mask.tif'
+def export_as_tif(ouput_path, data, transform, crs):
+    # Define metadata
+    height, width, channels = data.shape
+    count = channels  # Number of bands
+    dtype = data.dtype
 
-    # Open the destination TIFF file for read/write ("r+")
-    with rio.open(destination_tiff_path, "r+") as src:
-        # Copy geotransform and CRS from the source to the destination
-        src.transform = source_tiff_dataset.transform
-        src.crs = source_tiff_dataset.crs
+    # Create a new TIFF file
+    with rio.open(
+        ouput_path,
+        'w',
+        driver='GTiff',
+        height=height,
+        width=width,
+        count=count,
+        dtype=dtype,
+        transform=transform,
+        crs=crs
+    ) as dst:
+        # Write data to the TIFF file
+        dst.write(np.transpose(data, (2, 0, 1)))
 
 def save_grass_object(y_pred, tile_path):
     # Extract the tile name without the file extension
@@ -170,28 +173,7 @@ def save_grass_object(y_pred, tile_path):
     kernel = np.ones((4, 4), np.uint8)
     opening = cv2.morphologyEx(detected_trees_mask.astype('uint8'), cv2.MORPH_OPEN, kernel)
 
-    # Save the resulting mask as a GeoTIFF
-    tifffile.imwrite(
-        f'{results}/{tile_name}/grass_mask.tif',
-        np.dstack((opening, opening, opening)).astype('uint8'),
-        photometric='rgb',
-        compression='LZW',
-        bitspersample=8,
-        tile=(32, 32),
-        planarconfig=1  # chunky format
-    )
-
-    # Open the source TIFF dataset
-    source_tiff_dataset = rio.open(tile_path)
-
-    # Set the destination TIFF path
-    destination_tiff_path = f'{results}/{tile_name}/grass_mask.tif'
-
-    # Open the destination TIFF file for read/write ("r+")
-    with rio.open(destination_tiff_path, "r+") as src:
-        # Copy geotransform and CRS from the source to the destination
-        src.transform = source_tiff_dataset.transform
-        src.crs = source_tiff_dataset.crs
+    export_as_tif(f'{results}/{tile_name}/grass_mask.tif', np.dstack((opening, opening, opening)).astype(np.uint8), transform, crs)
 
     # Get the mask array
     mask_array = opening
@@ -213,79 +195,99 @@ def save_grass_object(y_pred, tile_path):
     output_shapefile = f'{results}/{tile_name}/grass.shp'
     gdf.to_file(output_shapefile, schema=schema)
 
+def get_trees_mask(clf, tile_path):
+    # Classify the image using a classifier
+    y_pred = dtr.Classifier().classify_img(tile_path, clf)
+
+    # Create a binary mask from the classification results
+    binary_mask = np.where(y_pred == 0, 0, 255).astype('uint8')
+
+    # Apply connected components labeling to identify tree components
+    num_labels, labels = cv2.connectedComponents(binary_mask)
+
+    # Calculate properties of each connected component (tree properties)
+    properties = []
+    for label in range(1, num_labels):
+        component_mask = labels == label
+        area = np.sum(component_mask)
+        
+        properties.append({
+            'label': label,
+            'area': area,
+        })
+    if properties:
+        return binary_mask, properties, labels
+    
+    return None, None, None
+
+def get_tree_points(tile_path, properties, y_pred, labels, between_areas_tiles):
 
 
-def worker_function(target):
-    # Ignore NotGeoreferencedWarning warnings from rasterio
-    warnings.filterwarnings("ignore", category=rio.errors.NotGeoreferencedWarning)
+    # Separate single trees from multiple trees based on properties
+    multipule_trees, _, combined_trees = saperate_single_multiple_trees(properties, y_pred, labels)
 
+    # Create Poisson noise points
+    points_surf = create_possion_noise(y_pred)
+
+    # Iterate over multiple trees and add them to the combined_trees array
+    for label in multipule_trees['label']:
+        component_mask = labels == label
+        for point in points_surf:
+            x = int(point[0])
+            y = int(point[1])
+            if x == component_mask.shape[0]:
+                x = int(point[0]) - 1
+            if y == component_mask.shape[1]:
+                x = int(point[1]) - 1
+            if component_mask[x, y] == 1:
+                combined_trees[x, y] = 1
+
+    # Get pixel locations as a shapefile 
+    shapefile = get_pixels_point_location_as_pandas(tile_path, combined_trees)
+
+    if between_areas_tiles and non_area_trees_shapefile_path != "":
+        src = rio.open(tile_path)
+        non_area_trees_shapefile = non_area_trees_shapefile[non_area_trees_shapefile.geometry.intersects(box(*src.bounds))]
+        indexes = []
+        
+        for i in range(shapefile.shape[0]):
+            row = shapefile.iloc[i]
+            if True not in list(row.geometry.intersects(non_area_trees_shapefile.geometry)):
+                indexes.append(i)
+    
+        return shapefile.iloc[indexes]
+
+    return shapefile
+    
+def worker_function(target, target_name ,between_areas_tiles = False):
     # Load data from 'tree_area_tiles.pkl'
-    with open(CONST_DIR_INNER_DATA + 'tree_area_tiles.pkl', 'rb') as f:
-        land_tiles = pickle.load(f)
+    with open(os.path.join(CONST_DIR_INNER_DATA, target_name), 'rb') as f:
+        tree_area_tiles = pickle.load(f)
 
     # Iterate over a specific range of tiles based on the 'target' argument
-    for tile_path in tqdm(land_tiles[target[0]: target[1]]):
+    for tile_path in tqdm(tree_area_tiles[target[0]: target[1]]):
         tile_name = os.path.basename(tile_path)
         
         # Check if the 'results' directory exists for saving results
-        if not os.path.exists(results + '\\' + os.path.splitext(tile_name)[0]):
-            # Classify the image using a classifier (likely a machine learning model)
-            y_pred = dtr.Classifier().classify_img(tile_path, clf)
-
-            # Create a binary mask from the classification results
-            binary_mask = np.where(y_pred == 0, 0, 1).astype('uint8')
-
-            # Apply connected components labeling to identify tree components
-            num_labels, labels = cv2.connectedComponents(binary_mask)
-
-            # Calculate properties of each connected component (tree properties)
-            properties = []
-            for label in range(1, num_labels):
-                component_mask = labels == label
-                area = np.sum(component_mask)
-                
-                properties.append({
-                    'label': label,
-                    'area': area,
-                })
+        if not os.path.exists(os.path.join(results, os.path.splitext(tile_name)[0])):
+            y_pred, properties, labels = get_trees_mask(clf, tile_path)
             
-            if len(properties) > 0:
-                # Separate single trees from multiple trees based on properties
-                multipule_trees, single_tees, combined_trees = saperate_single_multiple_trees(properties, y_pred, labels)
-
-                # Create Poisson noise points (not shown in the code)
-                points_surf = create_possion_noise(y_pred)
-
-                # Iterate over multiple trees and add them to the combined_trees array
-                for label in multipule_trees['label']:
-                    component_mask = labels == label
-                    for point in points_surf:
-                        x = int(point[0])
-                        y = int(point[1])
-                        if x == component_mask.shape[0]:
-                            x = int(point[0]) - 1
-                        if y == component_mask.shape[1]:
-                            x = int(point[1]) - 1
-                        if component_mask[x, y] == 1:
-                            combined_trees[x, y] = 1
-
-                # Get pixel locations as a shapefile (not shown in the code)
-                shapefile = get_pixels_point_location_as_pandas(tile_path, combined_trees)
-                
-                # Save tree object (not shown in the code)
+            if properties and not np.array_equal(y_pred, np.zeros_like(y_pred)):
+                shapefile = get_tree_points(tile_path, properties, y_pred, labels, between_areas_tiles)
+                # Save tree object 
                 save_tree_object(shapefile, y_pred, tile_path)
-                
-                # Save grass object (not shown in the code)
-                save_grass_object(y_pred, tile_path)
+
+            # Save grass object 
+            save_grass_object(y_pred, tile_path)
 
 
-if __name__ == '__main__':
+def execution(target_name, area_between = False):
     multiprocessing.freeze_support()
     # Get the number of CPU cores available on the system
     num_cores = multiprocessing.cpu_count()
 
-    # Load data from 'tree_area_tiles.pkl'
-    with open(CONST_DIR_INNER_DATA + 'tree_area_tiles.pkl', 'rb') as f:
+    #Load data from 'tree_area_tiles.pkl'
+    with open(os.path.join(CONST_DIR_INNER_DATA, target_name), 'rb') as f:
         land_tiles = pickle.load(f)
 
     # Calculate the size of each sub-range of data for parallel processing
@@ -308,10 +310,17 @@ if __name__ == '__main__':
 
     # Start a separate process for each sub-range of data
     for number in range(num_cores):
-        process = multiprocessing.Process(target=worker_function, args=(list_groups[number],))
+        process = multiprocessing.Process(target=worker_function, args=(list_groups[number], target_name, area_between))
         processes.append(process)
         process.start()
 
     # Wait for all processes to finish
     for process in processes:
         process.join()
+
+if __name__ == '__main__':
+    execution('tree_area_tiles.pkl', False)
+    execution('tiles_between_areas.pkl', True)
+
+
+    

@@ -33,20 +33,8 @@ from rasterio.features import Window
 from rasterio.crs import CRS
 from shapely.geometry import box
 
-
-
-CONST_DIR_INNER_DATA = 'iner_data\\'
-os.makedirs(CONST_DIR_INNER_DATA, exist_ok= True)
-
-"""**Data Preparation**"""
 with open('config.json', 'r') as f:
-    c = json.load(f)
-"""
-**Reduction aerial imagery resolution:**
-
-
-Certainly, the level of detail and accuracy in aerial imagery is directly linked to its spatial resolution. A resolution of 0.5 meters per pixel is generally sufficient for tree extraction, but superior results come with higher spatial resolutions. However, higher resolution implies longer training times for tree detection models, creating a trade-off between accuracy and processing speed. Moreover, the processing time is not just determined by resolution but also by the volume of available aerial imagery. More imagery results in longer processing times. To manage this, reducing spatial resolution minimizes the raw data. All the above must be carefully considered based on the specific project requirements.
-"""
+        c = json.load(f)
 
 def save_rescaled(tif_path,  output_dir, new_resolution=  tuple(c['raw_data']['desired_resolution']), current_resolution=tuple(c['raw_data']['current_resolution'])):
 
@@ -68,7 +56,8 @@ def save_rescaled(tif_path,  output_dir, new_resolution=  tuple(c['raw_data']['d
     resolution_ratio_y = current_resolution[0] / new_resolution[0]
 
     # Build the output file path for the rescaled GeoTIFF
-    output_tiff = os.path.join(output_dir, os.path.basename(tif_path)[:-4] + '_rescaled.tif')
+    file_base_name, ext = os.path.splitext(os.path.basename(tif_path))
+    output_tiff = os.path.join(output_dir, f'{file_base_name}_rescaled{ext}')
 
     # Open the original GeoTIFF file using rasterio and obtain metadata
     with rio.open(tif_path) as src:
@@ -101,45 +90,20 @@ def save_rescaled(tif_path,  output_dir, new_resolution=  tuple(c['raw_data']['d
         'height': new_height,
         'count': 3,  # Set count to 3 for RGB image
         'crs': crs,
-        'transform': new_transform,
-        'crs': CRS.from_epsg(4326)
+        'transform': new_transform
     }
 
     # Transpose the image data to match the expected shape (3, new_height, new_width)
-    resized = np.transpose(resized, (2, 0, 1))
+    output_tile = np.transpose(resized, (2, 0, 1))
 
     # Create a new GeoTIFF file with the updated georeferencing and rescaled data
     with rio.open(output_tiff, 'w', **profile) as dst:
-        dst.write(resized)
+        dst.write(output_tile)
 
     # Return the path to the saved rescaled GeoTIFF
     return output_tiff
 
-# Specify the path to the directory containing the original GeoTIFF files
-data = c['path']['raw_data']
-
-# Specify the directory where you want to save the new rescaled GeoTIFF files
-output_dir = c['path']['raw_data_rescaled']
-
-# Create the output directory if it doesn't exist
-os.makedirs(output_dir, exist_ok=True)
-
-print ("raw tiff images rescaling has begun")
-# Iterate through all TIFF files in the data directory
-if (glob.glob(os.path.join(data, '*.tif')) == []):
-    raise Exception('raw data folder is empty')
-
-
-for tif_image_path in tqdm(glob.glob(os.path.join(data, '*.tif'))):
-    # Call the save_rescaled function to rescale and save each TIFF file
-    path = save_rescaled(tif_image_path, output_dir)
-
-"""**To Tiles:**
-
-After reducing the spatial resolution, the resized data needs to be divided into tiles, each with a resolution not exceeding 1000x1000. This is necessary for the Detectree library, which selects 1% of these tiles to effectively represent the entire dataset for labeling and training the model (explained in detail later).  
-"""
-
-def to_tiles(rescled_path, output_dir, tile_dim= tuple(c['tile']['dim'])):
+def to_tiles(rescled_path, output_dir, tile_dim):
     """
     Split a rescaled GeoTIFF image into smaller tiles and save them as separate GeoTIFF files.
 
@@ -187,30 +151,7 @@ def to_tiles(rescled_path, output_dir, tile_dim= tuple(c['tile']['dim'])):
 
     #print("Tiles created successfully.")  # Print a message indicating successful tile creation
 
-# Define the directory where the rescaled images are saved
-data = c['path']['raw_data_rescaled']
 
-# Define the directory where you want to save the tiles
-output_dir = c['path']['output_dir_for_tiles']
-
-print (data, glob.glob(data + '*.tif'))
-
-os.makedirs(output_dir, exist_ok=True)
-print ('raw data rescaled to tiles, has been started')
-# Iterate through all TIFF files in the 'data' directory
-for tif_image_path in tqdm(glob.glob(os.path.join(data, '*.tif'))):
-    # Call the 'to_tiles' function to split each rescaled image into tiles remember all the tiles must be at the same size. Therefore the Geotiff's resolution in data directory must be devisible by the tile's resulution.
-    to_tiles(tif_image_path, output_dir)
-
-"""**Select tiles likely to have trees**
-
-Selecting tiles likely to have trees is a vital step. To improve training efficiency and accuracy, it's best to choose tiles where trees are likely to be present. For instance, in the Porto Santo Project, out of 12,000 tiles, 9,000 were sea tiles, showing only the sea and no trees. To differentiate between tiles that can contain trees (‘land tiles’) and sea tiles, vector data from OpenStreetMap, representing the sea around Porto Santo, was used. In different projects, a similar approach might be needed for other types of tiles, such as desert tiles or tiles showing large lakes.
-
-In this step, a fixed script can be used alongside the user's action of creating polygons for areas without trees. Specifically, the user can utilize QGIS, a popular geographic information system software, to create polygons representing regions devoid of trees. By doing so, the software can then distinguish between areas with trees and those without, aiding in the accurate selection of tiles likely to have trees for further analysis and processing.
-"""
-
-# Path to the shapefile containing polygons of non-tree areas (e.g., water bodies)
-shapefile_path_of_areas_non_tree_polygons = c['path']['shapefile_of_non_tree_areas']
 
 def is_tile_intersects_with_object(tile_path ,polylines):
     # Open the GeoTIFF image specified by 'tile_path' using 'rasterio'
@@ -272,108 +213,162 @@ def is_tile_within_object(tile_path, polygons):
     return False
 
 
-# List to store tiles within non-tree areas
-non_tree_areas_tiles = []
 
-# List to store tiles intersecting both tree and non-tree areas
-tiles_between_areas = []
+if __name__ == "__main__":
+    CONST_DIR_INNER_DATA = 'iner_data\\'
+    os.makedirs(CONST_DIR_INNER_DATA, exist_ok= True)
 
-# List to store tiles within tree areas
-tree_area_tiles = []
-
-
-print ('tiles are devided to categories')
-# Load non-tree area polygons from the shapefile
-
-print (output_dir)
-if (shapefile_path_of_areas_non_tree_polygons != ''):
-    areas_non_tree_polygons = gpd.read_file(shapefile_path_of_areas_non_tree_polygons)
-    # Iterate through each tile in the specified directory
-    for tile_path in tqdm(glob.glob(os.path.join(c['path']['output_dir_for_tiles'] , '*tif'))):
-        # Check if the tile is within non-tree areas
-        if is_tile_within_object(tile_path, areas_non_tree_polygons):
-            non_tree_areas_tiles.append(tile_path)
-        # Check if the tile intersects with both tree and non-tree areas
-        elif is_tile_intersects_with_object(tile_path, areas_non_tree_polygons):
-            tiles_between_areas.append(tile_path)
-        # If the tile is outside non-tree areas, consider it within tree areas
-        else:
-            tree_area_tiles.append(tile_path)
-
-
-else:
-    tree_area_tiles = glob.glob(os.path.join(c['path']['output_dir_for_tiles'],'*.tif'))
-    #saving the paths' lists as a pickle files for future use.
-
-with open(CONST_DIR_INNER_DATA + 'tree_area_tiles.pkl', 'wb') as f:
-    pickle.dump(tree_area_tiles, f)
-
-with open(CONST_DIR_INNER_DATA + 'tiles_between_areas.pkl', 'wb') as f:
-    pickle.dump(tiles_between_areas, f)
-
-with open(CONST_DIR_INNER_DATA + 'non_tree_areas_tiles.pkl', 'wb') as f:
-    pickle.dump(non_tree_areas_tiles, f)
-
-# File path where you want to save the list
-txt_file_path = CONST_DIR_INNER_DATA + 'tree_area_tiles.txt'
-
-print (CONST_DIR_INNER_DATA + 'tree_area_tiles.txt')
-# Open the file in write mode ('w')
-with open(txt_file_path, 'w') as f:
-    # Iterate over the list and write each element to a new line
-    for path in tree_area_tiles:
-        f.write(str(path) + '\n')
-
-
-"""**Model Training using Detectree Library (Pythonic Library):**
-
-For additional details about the Detectree library, you can visit the following link: https://github.com/martibosch/detectree. This repository provides in-depth information and resources related to the library, including documentation and usage guidelines.
-"""
-
-with open(CONST_DIR_INNER_DATA + 'tree_area_tiles.pkl', 'rb') as f:
-    tree_area_tiles = pickle.load(f)
-
-if (c['model']['train']):
-    print ('split has been started')
-
-    # Select the training tiles from the tiled aerial imagery dataset
-    # Using the TrainingSelector class from the Detectree library
-    ts = TrainingSelector(img_filepaths= tree_area_tiles)
-    # Split the dataset into training and testing sets using the 'cluster-I' method
-    split_df = ts.train_test_split(method='cluster-I')
-
-    with open(CONST_DIR_INNER_DATA + 'split_df.pkl', 'wb') as f:
-        pickle.dump(split_df , f)
-        
-    """**Data Selection for labeling, Data lableing and Model Training:**
-
-    The Detectree tree library automatically chooses 1% of the tiles that most accurately represent the entire set of tiles for user labeling. The 1% tiles should be labeled by the user.
-
+    """**Data Preparation**"""
+    
+    """
+    **Reduction aerial imagery resolution:
+    Certainly, the level of detail and accuracy in aerial imagery is directly linked to its spatial resolution. A resolution of 0.5 meters per pixel is generally sufficient for tree extraction, but superior results come with higher spatial resolutions. However, higher resolution implies longer training times for tree detection models, creating a trade-off between accuracy and processing speed. Moreover, the processing time is not just determined by resolution but also by the volume of available aerial imagery. More imagery results in longer processing times. To manage this, reducing spatial resolution minimizes the raw data. All the above must be carefully considered based on the specific project requirements.
     """
 
-    # Directory to store the training tiles
-    train_tiles_dir = c['path']['train_tiles_dir']
+    # Specify the path to the directory containing the original GeoTIFF files
+    TRUE_IMAGERY_DIR = c['path']['raw_data']
+    # Specify the directory where you want to save the new rescaled GeoTIFF files
+    OUTPUT_DIR = c['path']['raw_data_rescaled']
+    # Create the output directory if it doesn't exist
+    os.makedirs(OUTPUT_DIR, exist_ok=True)
 
-    # Create the directory if it doesn't exist
-    os.makedirs(train_tiles_dir, exist_ok=True)
+    print ("raw tiff images rescaling has begun")
+    # Iterate through all TIFF files in the TRUE_IMAGERY_DIR directory
+    tiff_images_list = glob.glob(os.path.join(TRUE_IMAGERY_DIR, '*.tif'))
+    if not (tiff_images_list):
+        raise Exception('raw data folder is empty')
+    
+    for tif_image_path in tqdm(tiff_images_list):
+        # Call the save_rescaled function to rescale and save each TIFF file
+        path = save_rescaled(tif_image_path, OUTPUT_DIR)
 
-    # Copy training tiles to the specified directory
-    for tile_path in split_df[split_df['train'] == True]['img_filepath']:
-        shutil.copy(tile_path, train_tiles_dir + os.path.basename(tile_path))
+    
+    # Define the directory where the rescaled images are saved
+    RAW_DATA_RESCALED_FOLDER = c['path']['raw_data_rescaled']
+    
+    # Define the directory where you want to save the tiles
+    TILES_OUTPUT_FOLDER = c['path']['output_dir_for_tiles']
+    os.makedirs(TILES_OUTPUT_FOLDER, exist_ok=True)
+    
+    print ('raw data rescaled to tiles, has been started')
+    # Iterate through all TIFF files in the 'data' directory
+    rescaed_imagery_filepaths_list = glob.glob(os.path.join(RAW_DATA_RESCALED_FOLDER, '*_rescaled.tif'))
+    for tif_image_path in tqdm(rescaed_imagery_filepaths_list):
+        # Call the 'to_tiles' function to split each rescaled image into tiles remember all the tiles must be at the same size. Therefore the Geotiff's resolution in data directory must be devisible by the tile's resulution.
+        to_tiles(tif_image_path, TILES_OUTPUT_FOLDER, c['tile']['dim'])
 
-    root_dir = ''
-    images_dir = train_tiles_dir
-    masks_dir = c['path']['masks_dir']
-    os.makedirs(masks_dir, exist_ok= True)
+    """**To Tiles:**
+    After reducing the spatial resolution, the resized data needs to be divided into tiles, each with a resolution not exceeding 1000x1000. This is necessary for the Detectree library, which selects 1% of these tiles to effectively represent the entire dataset for labeling and training the model (explained in detail later).  
+    """
 
-    print ("""**Note!**
+    # List to store tiles within non-tree areas
+    non_tree_areas_tiles = []
 
-    Before continuing with the code you have to make masks of the training tiles (you can use qgis or gimp).
+    # List to store tiles intersecting both tree and non-tree areas
+    tiles_between_areas = []
 
-    The training tiles are waiting for you in the training tiles directory
+    # List to store tiles within tree areas
+    tree_area_tiles = []
 
-    Create masks only for the tiles that has tree in them and save them in the masks directory **with the same name as the original tile**.
+    """**Select tiles likely to have trees**
 
-    The following code will automaticly detect missing masks and generate blank masks (for tiles without trees).
-    """)
+    Selecting tiles likely to have trees is a vital step. To improve training efficiency and accuracy, it's best to choose tiles where trees are likely to be present. For instance, in the Porto Santo Project, out of 12,000 tiles, 9,000 were sea tiles, showing only the sea and no trees. To differentiate between tiles that can contain trees (‘land tiles’) and sea tiles, vector data from OpenStreetMap, representing the sea around Porto Santo, was used. In different projects, a similar approach might be needed for other types of tiles, such as desert tiles or tiles showing large lakes.
 
+    In this step, a fixed script can be used alongside the user's action of creating polygons for areas without trees. Specifically, the user can utilize QGIS, a popular geographic information system software, to create polygons representing regions devoid of trees. By doing so, the software can then distinguish between areas with trees and those without, aiding in the accurate selection of tiles likely to have trees for further analysis and processing.
+    """
+
+    # Path to the shapefile containing polygons of non-tree areas (e.g., water bodies)
+    shapefile_path_of_areas_non_tree_polygons = c['path']['shapefile_of_non_tree_areas']
+
+    print ('tiles are devided to categories')
+    # Load non-tree area polygons from the shapefile
+
+    if (shapefile_path_of_areas_non_tree_polygons != ''):
+        areas_non_tree_polygons = gpd.read_file(shapefile_path_of_areas_non_tree_polygons)
+        # Iterate through each tile in the specified directory
+        for tile_path in tqdm(glob.glob(os.path.join(TILES_OUTPUT_FOLDER , '*tif'))):
+            # Check if the tile is within non-tree areas
+            if is_tile_within_object(tile_path, areas_non_tree_polygons):
+                non_tree_areas_tiles.append(tile_path)
+            # Check if the tile intersects with both tree and non-tree areas
+            elif is_tile_intersects_with_object(tile_path, areas_non_tree_polygons):
+                tiles_between_areas.append(tile_path)
+            # If the tile is outside non-tree areas, consider it within tree areas
+            else:
+                tree_area_tiles.append(tile_path)
+
+
+    else:
+        tree_area_tiles = glob.glob(os.path.join(TILES_OUTPUT_FOLDER,'*.tif'))
+        #saving the paths' lists as a pickle files for future use.
+
+    with open(os.path.join(CONST_DIR_INNER_DATA, 'tree_area_tiles.pkl'), 'wb') as f:
+        pickle.dump(tree_area_tiles, f)
+    
+    with open(os.path.join(CONST_DIR_INNER_DATA, 'tiles_between_areas.pkl'), 'wb') as f:
+        pickle.dump(tiles_between_areas, f)
+
+    with open(os.path.join(CONST_DIR_INNER_DATA, 'non_tree_areas_tiles.pkl'), 'wb') as f:
+        pickle.dump(non_tree_areas_tiles, f)
+
+    # File path where you want to save the list
+    txt_file_path = os.path.join(CONST_DIR_INNER_DATA, 'tree_area_tiles.txt')
+    print (txt_file_path)
+    # Open the file in write mode ('w')
+    with open(txt_file_path, 'w') as f:
+        # Iterate over the list and write each element to a new line
+        for path in tree_area_tiles:
+            f.write(str(path) + '\n')
+
+
+    """**Model Training using Detectree Library (Pythonic Library):**
+
+    For additional details about the Detectree library, you can visit the following link: https://github.com/martibosch/detectree. This repository provides in-depth information and resources related to the library, including documentation and usage guidelines.
+    """
+
+    with open(CONST_DIR_INNER_DATA + 'tree_area_tiles.pkl', 'rb') as f:
+        tree_area_tiles = pickle.load(f)
+
+    if (c['model']['train']):
+        print ('split has been started')
+
+        # Select the training tiles from the tiled aerial imagery dataset
+        # Using the TrainingSelector class from the Detectree library
+        ts = TrainingSelector(img_filepaths= tree_area_tiles)
+        # Split the dataset into training and testing sets using the 'cluster-I' method
+        split_df = ts.train_test_split(method='cluster-I')
+
+        with open(os.path.join(CONST_DIR_INNER_DATA, 'split_df.pkl'), 'wb') as f:
+            pickle.dump(split_df , f)
+            
+        """**Data Selection for labeling, Data lableing and Model Training:**
+
+        The Detectree tree library automatically chooses 1% of the tiles that most accurately represent the entire set of tiles for user labeling. The 1% tiles should be labeled by the user.
+
+        """
+
+        # Directory to store the training tiles
+        train_tiles_dir = c['path']['train_tiles_dir']
+
+        # Create the directory if it doesn't exist
+        os.makedirs(train_tiles_dir, exist_ok=True)
+
+        # Copy training tiles to the specified directory
+        for tile_path in split_df[split_df['train'] == True]['img_filepath']:
+            shutil.copy(tile_path, train_tiles_dir + os.path.basename(tile_path))
+
+        root_dir = ''
+        images_dir = train_tiles_dir
+        masks_dir = c['path']['masks_dir']
+        os.makedirs(masks_dir, exist_ok= True)
+
+        print ("""**Note!**
+
+        Before continuing with the code you have to make masks of the training tiles (you can use qgis or gimp).
+
+        The training tiles are waiting for you in the training tiles directory
+
+        Create masks only for the tiles that has tree in them and save them in the masks directory **with the same name as the original tile**.
+
+        The following code will automaticly detect missing masks and generate blank masks (for tiles without trees).
+        """)
